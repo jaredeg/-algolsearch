@@ -1,148 +1,180 @@
-import '../css/app.scss';
-import $ from 'jquery';
-import 'bootstrap';
-import 'waypoints';
-import 'scrollTo';
-import 'algoliasearch';
+'use strict';
+/* global instantsearch */
 
-app({
-    appId: 'P2GLY9C5UX',
-    apiKey: '57f2f61db10f10c4eb26f0f024e1b7ba'
-    indexName: 'devBESTBUY'
+
+var search = instantsearch({
+  appId: 'latency',
+  apiKey: '6be0576ff61c053d5f9a3225e2a90f76',
+  indexName: 'ikea'
 });
 
+search.addWidget(
+  instantsearch.widgets.searchBox({
+    container: '#q',
+    placeholder: 'Search a product'
+  })
+);
 
-function app(agolSearch) {
-  var search = instantsearch({
-    appId: agolSearch.appId,
-    apiKey: agolSearch.apiKey,
-    indexName: agolSearch.indexName,
-    urlSync: true
+search.addWidget(
+  instantsearch.widgets.stats({
+    container: '#stats'
+  })
+);
+
+search.on('render', function() {
+  $('.product-picture img').addClass('transparent');
+  $('.product-picture img').one('load', function() {
+      $(this).removeClass('transparent');
+  }).each(function() {
+      if(this.complete) $(this).load();
   });
-
-
-$(document).ready(function() {
-        var refinements = {};
-        var $inputfield = $('#q');
-        // Replace the following values by your ApplicationID and ApiKey.
-        var client = algoliasearch('P2GLY9C5UX', '57f2f61db10f10c4eb26f0f024e1b7ba');
-        // Replace the following value by the name of the index you want to query.
-        var index = client.initIndex('dev_BESTBUY');
-        $inputfield.keyup(function() {
-          search();
-        }).focus();
-        window.toggleRefine = function(refinement) {
-          refinements[refinement] = !refinements[refinement];
-          search();
-        };
-        function search() {
-          var filters = [];
-          for (var refinement in refinements) {
-            if (refinements[refinement]) {
-              filters.push(refinement);
-            }
-          }
-          index.search($inputfield.val(), {
-            facets: '*', facetFilters: filters
-          }, searchCallback);
-        }
-        function searchCallback(err, content) {
-          if (err) {
-            // error
-            return;
-          }
-          if (content.query != $inputfield.val()) {
-            // do not consider out-dated queries
-            return;
-          }
-          if (content.hits.length == 0 || $.trim(content.query) === '') {
-            // no results
-            $('#hits').empty();
-            $('#facets').empty();
-            return;
-          }
-          // Scan all hits and display them
-          var hits = '';
-          for (var i = 0; i < content.hits.length; ++i) {
-            var hit = content.hits[i];
-            hits += '<div class="hit">';
-            for (var attribute in hit._highlightResult) {
-              hits += '<div class="attribute">' +
-                '<span>' + attribute + ': </span>' +
-                hit._highlightResult[attribute].value +
-                '</div>';
-            }
-            hits += '</div>';
-          }
-          $('#hits').html(hits);
-          // Scan all facets and display them
-          var facets = '';
-          for (var facet in content.facets) {
-            facets += '<h4>' + facet + '</h4>';
-            facets += '<ul>';
-            var values = content.facets[facet];
-            for (var value in values) {
-              var refinement = facet + ':' + value;
-              facets += '<li class="' + (refinements[refinement] ? 'refined' : '') + '">' +
-                  '<a href="#" onclick="toggleRefine(\'' + refinement + '\'); return false">' + value + '</a> (' + values[value] + ')' +
-                '</li>';
-            }
-            facets += '</ul>';
-          }
-          $('#facets').html(facets);
-        }
-      });
-/**
- * EXAMPLE JS STARTS
- */
-$(function() {
-    $('[id^=scrollTo]').click(function() {
-        var id = $(this).attr('id').slice(9);
-        $(window).scrollTo($('#' + id), 1000, { offset: { top: -51, left: 0 } });
-    });
-
-    $('#marketing').waypoint(function() {
-        $('.img-circle').addClass('animated zoomIn');
-    }, {
-        offset: '50%',
-        triggerOnce: true
-    });
-
-    $('.featurette').waypoint(function() {
-        $('#' + this.element.id + ' .featurette-image').addClass('animated pulse');
-    }, {
-        offset: '50%',
-        triggerOnce: true
-    });
-
-     
 });
 
-     function searchCallback(content) {
-        if (content.query !== $('#q').val()) {
-          // do not take out-dated answers into account
-          return;
-        }
-        if (content.hits.length === 0) {
-          // no results
-          $('#hits').empty();
-          return;
-        }
-        // Scan all hits and display them
-        var html = '';
-        for (var i = 0; i < content.hits.length; ++i) {
-          var hit = content.hits[i];
-          html += '<div class="hit">';
-          for (var attribute in hit._highlightResult) {
-            html += '<div class="attribute">' +
-              '<span>' + attribute + ': </span>' +
-              hit._highlightResult[attribute].value +
-              '</div>';
-          }
-          html += '</div>';
-        }
-        $('#hits').html(html);
+var hitTemplate =
+  '<article class="hit">' +
+      '<div class="product-picture-wrapper">' +
+        '<div class="product-picture"><img src="{{image}}" /></div>' +
+      '</div>' +
+      '<div class="product-desc-wrapper">' +
+        '<div class="product-name">{{{_highlightResult.name.value}}}</div>' +
+        '<div class="product-type">{{{_highlightResult.type.value}}}</div>' +
+        '<div class="product-price">${{price}}</div>' +
+        '<div class="product-rating">{{#stars}}<span class="ais-star-rating--star{{^.}}__empty{{/.}}"></span>{{/stars}}</div>' +
+      '</div>' +
+  '</article>';
+
+var noResultsTemplate =
+  '<div class="text-center">No results found matching <strong>{{query}}</strong>.</div>';
+
+var menuTemplate =
+  '<a href="javascript:void(0);" class="facet-item {{#isRefined}}active{{/isRefined}}"><span class="facet-name"><i class="fa fa-angle-right"></i> {{name}}</span class="facet-name"></a>';
+
+var facetTemplateCheckbox =
+  '<a href="javascript:void(0);" class="facet-item">' +
+    '<input type="checkbox" class="{{cssClasses.checkbox}}" value="{{name}}" {{#isRefined}}checked{{/isRefined}} />{{name}}' +
+    '<span class="facet-count">({{count}})</span>' +
+  '</a>';
+
+var facetTemplateColors =
+  '<a href="javascript:void(0);" data-facet-value="{{name}}" class="facet-color {{#isRefined}}checked{{/isRefined}}"></a>';
+
+search.addWidget(
+  instantsearch.widgets.hits({
+    container: '#hits',
+    hitsPerPage: 16,
+    templates: {
+      empty: noResultsTemplate,
+      item: hitTemplate
+    },
+    transformData: function(hit) {
+      hit.stars = [];
+      for (var i = 1; i <= 5; ++i) {
+        hit.stars.push(i <= hit.rating);
       }
-/**
- * EXAMPLE JS ENDS
- */
+      return hit;
+    }
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.pagination({
+    container: '#pagination',
+    cssClasses: {
+      active: 'active'
+    },
+    labels: {
+      previous: '<i class="fa fa-angle-left fa-2x"></i> Previous page',
+      next: 'Next page <i class="fa fa-angle-right fa-2x"></i>'
+    },
+    showFirstLast: false
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.hierarchicalMenu({
+    container: '#categories',
+    attributes: ['category', 'sub_category', 'sub_sub_category'],
+    sortBy: ['name:asc'],
+    templates: {
+      item: menuTemplate
+    }
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.refinementList({
+    container: '#materials',
+    attributeName: 'materials',
+    operator: 'or',
+    limit: 10,
+    templates: {
+      item: facetTemplateCheckbox,
+      header: '<div class="facet-title">Materials</div class="facet-title">'
+    }
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.refinementList({
+    container: '#colors',
+    attributeName: 'colors',
+    operator: 'or',
+    limit: 10,
+    templates: {
+      item: facetTemplateColors,
+      header: '<div class="facet-title">Colors</div class="facet-title">'
+    }
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.starRating({
+    container: '#rating',
+    attributeName: 'rating',
+    templates: {
+      header: '<div class="facet-title">Ratings</div class="facet-title">'
+    }
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.priceRanges({
+    container: '#prices',
+    attributeName: 'price',
+    cssClasses: {
+      list: 'nav nav-list',
+      count: 'badge pull-right',
+      active: 'active'
+    },
+    templates: {
+      header: '<div class="facet-title">Prices</div class="facet-title">'
+    }
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.sortBySelector({
+    container: '#sort-by-selector',
+    indices: [
+      {name: 'ikea', label: 'Featured'},
+      {name: 'ikea_price_asc', label: 'Price asc.'},
+      {name: 'ikea_price_desc', label: 'Price desc.'}
+    ],
+    label:'sort by'
+  })
+);
+
+search.addWidget(
+  instantsearch.widgets.clearAll({
+    container: '#clear-all',
+    templates: {
+      link: '<i class="fa fa-eraser"></i> Clear all filters'
+    },
+    cssClasses: {
+      root: 'btn btn-block btn-default'
+    },
+    autoHideContainer: true
+  })
+);
+
+search.start();
